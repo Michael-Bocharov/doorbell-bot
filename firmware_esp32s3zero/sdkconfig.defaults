@@ -1,0 +1,30 @@
+# -------------------------------------------------------
+# DoorBell Telegram — sdkconfig.defaults
+# -------------------------------------------------------
+
+# Disable Bluetooth (not needed for Telegram-only firmware)
+CONFIG_BT_ENABLED=n
+
+# Custom Partition Table
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# Flash size
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="4MB"
+
+# Enable HTTPS / TLS via mbedTLS (for Telegram Bot API)
+CONFIG_ESP_TLS_USING_MBEDTLS=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=y
+CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=y
+
+# HTTP client
+CONFIG_ESP_HTTP_CLIENT_ENABLE_HTTPS=y
+
+# Increase main task stack for WiFi + HTTP init
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# WiFi
+CONFIG_ESP_WIFI_SSID="myssid"
+CONFIG_ESP_WIFI_PASSWORD="mypassword"

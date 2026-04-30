@@ -1,0 +1,22 @@
+# ESP-IDF specific
+build/
+sdkconfig
+sdkconfig.old
+dependencies.lock
+managed_components/
+.cache/
+
+# IDE and OS files
+.DS_Store
+.vscode/
+.idea/
+*.swp
+*~
+
+# Python virtual environments (if any local ones are created)
+venv/
+env/
+.env
+
+# Secrets (Make sure not to commit any files containing hardcoded credentials)
+# If you create a file with your specific config, ignore it here
