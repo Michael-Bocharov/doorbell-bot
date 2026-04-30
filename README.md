@@ -6,6 +6,7 @@ This project is an ESP32-S3-Zero based firmware that bridges a **generic interco
 
 - **Instant Notifications**: Sends a Telegram message immediately when the doorbell rings.
 - **Remote Unlock**: Reply `open` or `/open` to the bot to activate the door relay.
+- **Whitelist Security**: Only authorized users can open the door. The Admin can add/remove users via Telegram commands.
 - **Visual Feedback**: Onboard WS2812 RGB LED indicates the current system status (Connecting, Online, Ringing, Error).
 - **No Extra Backend**: Communicates directly with the Telegram Bot API over HTTPS. No MQTT broker, separate backend server, or custom mobile app required.
 - **Debouncing**: Built-in 5-second debounce to prevent spamming notifications if the doorbell is pressed multiple times quickly.
@@ -56,6 +57,7 @@ Navigate to **DoorBell Configuration** and set:
 - **WiFi Password**
 - **Telegram Bot Token**
 - **Telegram Chat ID**
+- **Telegram Admin User ID**: (Required for whitelist functionality). Only this numeric user ID will be able to add/remove other users. You can get your User ID from @userinfobot.
 
 *(Alternatively, you can modify `firmware_esp32s3zero/main/Kconfig.projbuild` default values if you prefer, though menuconfig is recommended to keep secrets out of source control).*
 
@@ -77,9 +79,17 @@ idf.py -p /dev/tty.usbmodem* flash monitor
 
 Once the device is online (Green LED), you can interact with it via Telegram:
 
+**General Commands (Requires Authorization):**
 | Command | Action |
 |---------|--------|
-| `open` or `/open` | Triggers the door relay for 2 seconds to unlock the door. (Case-insensitive) |
+| `open` or `/open` | Triggers the door relay for 2 seconds to unlock the door. |
+
+**Admin Commands (Only accepted from Admin ID):**
+| Command | Action |
+|---------|--------|
+| `/add <user_id>` | Adds a Telegram User ID to the whitelist so they can open the door. |
+| `/remove <user_id>` | Removes a User ID from the whitelist. |
+| `/list` | Shows the list of currently authorized User IDs. |
 
 ## 📝 License
 

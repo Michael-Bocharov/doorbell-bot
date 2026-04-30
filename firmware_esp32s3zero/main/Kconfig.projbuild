@@ -26,4 +26,11 @@ menu "DoorBell Configuration"
             Chat ID of the Telegram user or group to send notifications to.
             Use @userinfobot or @RawDataBot to find your chat ID.
 
+    config DOORBELL_TELEGRAM_ADMIN_ID
+        string "Telegram Admin User ID"
+        default "0"
+        help
+            Telegram User ID of the administrator (numeric).
+            Commands like /add and /remove will only be accepted from this ID.
+
 endmenu

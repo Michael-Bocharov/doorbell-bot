@@ -8,6 +8,8 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "cJSON.h"
+#include "nvs.h"
+#include "nvs_flash.h"
 
 static const char *TAG = "telegram_bot";
 
@@ -15,6 +17,12 @@ static const char *TAG = "telegram_bot";
 static char s_bot_token[128];
 static char s_chat_id[32];
 static telegram_command_callback_t s_cmd_callback = NULL;
+
+/* Whitelist state */
+#define MAX_WHITELIST_USERS 20
+static int64_t s_whitelist[MAX_WHITELIST_USERS];
+static int s_whitelist_count = 0;
+static int64_t s_admin_id = 0;
 
 /* Polling state */
 static int64_t s_last_update_id = 0;
@@ -41,6 +49,51 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt)
             break;
     }
     return ESP_OK;
+}
+
+/* ------------------------------------------------------------------ */
+/* Whitelist Management                                               */
+/* ------------------------------------------------------------------ */
+static void save_whitelist(void) {
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
+        nvs_set_blob(my_handle, "whitelist", s_whitelist, sizeof(int64_t) * s_whitelist_count);
+        nvs_commit(my_handle);
+        nvs_close(my_handle);
+    }
+}
+
+static bool is_user_authorized(int64_t user_id) {
+    if (user_id != 0 && user_id == s_admin_id) return true;
+    for (int i = 0; i < s_whitelist_count; i++) {
+        if (s_whitelist[i] == user_id) return true;
+    }
+    return false;
+}
+
+static bool add_user(int64_t user_id) {
+    if (is_user_authorized(user_id)) return false; // Already there
+    if (s_whitelist_count < MAX_WHITELIST_USERS) {
+        s_whitelist[s_whitelist_count++] = user_id;
+        save_whitelist();
+        return true;
+    }
+    return false;
+}
+
+static bool remove_user(int64_t user_id) {
+    for (int i = 0; i < s_whitelist_count; i++) {
+        if (s_whitelist[i] == user_id) {
+            for (int j = i; j < s_whitelist_count - 1; j++) {
+                s_whitelist[j] = s_whitelist[j + 1];
+            }
+            s_whitelist_count--;
+            save_whitelist();
+            return true;
+        }
+    }
+    return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -134,10 +187,60 @@ static void parse_updates(const char *json)
         const char *text = text_obj->valuestring;
         ESP_LOGI(TAG, "Received message: %s", text);
 
+        /* Extract sender ID */
+        cJSON *from = cJSON_GetObjectItem(message, "from");
+        int64_t from_id = 0;
+        if (from) {
+            cJSON *id_obj = cJSON_GetObjectItem(from, "id");
+            if (cJSON_IsNumber(id_obj)) {
+                from_id = (int64_t)id_obj->valuedouble;
+            }
+        }
+
+        /* Check admin commands */
+        if (from_id == s_admin_id && s_admin_id != 0) {
+            if (strncmp(text, "/add ", 5) == 0) {
+                int64_t new_user = atoll(text + 5);
+                if (new_user != 0) {
+                    if (add_user(new_user)) {
+                        telegram_bot_send_message("✅ User added to whitelist.");
+                    } else {
+                        telegram_bot_send_message("⚠️ Could not add user (already exists or list full).");
+                    }
+                }
+                continue;
+            } else if (strncmp(text, "/remove ", 8) == 0) {
+                int64_t del_user = atoll(text + 8);
+                if (remove_user(del_user)) {
+                    telegram_bot_send_message("✅ User removed from whitelist.");
+                } else {
+                    telegram_bot_send_message("⚠️ User not found in whitelist.");
+                }
+                continue;
+            } else if (strcasecmp(text, "/list") == 0) {
+                char list_msg[512] = "📋 <b>Whitelist:</b>\n";
+                for (int i = 0; i < s_whitelist_count; i++) {
+                    char user_str[32];
+                    snprintf(user_str, sizeof(user_str), "- %lld\n", s_whitelist[i]);
+                    strncat(list_msg, user_str, sizeof(list_msg) - strlen(list_msg) - 1);
+                }
+                if (s_whitelist_count == 0) strncat(list_msg, "<i>Empty</i>", sizeof(list_msg) - strlen(list_msg) - 1);
+                telegram_bot_send_message(list_msg);
+                continue;
+            }
+        }
+
         /* Check for "open" command (case-insensitive) */
         if (strcasecmp(text, "open") == 0 || strcasecmp(text, "/open") == 0) {
-            if (s_cmd_callback) {
-                s_cmd_callback("OPEN");
+            if (is_user_authorized(from_id)) {
+                if (s_cmd_callback) {
+                    s_cmd_callback("OPEN");
+                }
+            } else {
+                char msg[128];
+                snprintf(msg, sizeof(msg), "⛔️ Unauthorized access attempt from ID: %lld", from_id);
+                telegram_bot_send_message(msg);
+                ESP_LOGW(TAG, "Unauthorized access attempt from %lld", from_id);
             }
         }
     }
@@ -202,7 +305,22 @@ void telegram_bot_init(const char *bot_token, const char *chat_id,
     strncpy(s_chat_id, chat_id, sizeof(s_chat_id) - 1);
     s_cmd_callback = callback;
 
-    ESP_LOGI(TAG, "Telegram bot initialised (chat_id=%s)", s_chat_id);
+    s_admin_id = atoll(CONFIG_DOORBELL_TELEGRAM_ADMIN_ID);
+
+    /* Load whitelist from NVS */
+    nvs_handle_t my_handle;
+    esp_err_t err = nvs_open("storage", NVS_READWRITE, &my_handle);
+    if (err == ESP_OK) {
+        size_t required_size = 0;
+        err = nvs_get_blob(my_handle, "whitelist", NULL, &required_size);
+        if (err == ESP_OK && required_size > 0 && required_size <= sizeof(s_whitelist)) {
+            nvs_get_blob(my_handle, "whitelist", s_whitelist, &required_size);
+            s_whitelist_count = required_size / sizeof(int64_t);
+        }
+        nvs_close(my_handle);
+    }
+
+    ESP_LOGI(TAG, "Telegram bot initialised (chat_id=%s, admin_id=%lld, whitelist_count=%d)", s_chat_id, s_admin_id, s_whitelist_count);
 
     /* Start the polling task with enough stack for TLS + JSON parsing */
     xTaskCreate(telegram_poll_task, "tg_poll", 8192, NULL, 5, NULL);
