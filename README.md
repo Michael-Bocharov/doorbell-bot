@@ -1,6 +1,6 @@
 # DoorBell — Telegram Bot Integration
 
-This project is an ESP32-S3-Zero based firmware that bridges a **Tigui SERIE 8** doorbell to **Telegram**. It allows you to receive notifications on your phone when someone rings the doorbell and remotely open the door by replying with a simple command.
+This project is an ESP32-S3-Zero based firmware that bridges a **generic intercom/doorbell system** to **Telegram**. It allows you to receive notifications on your phone when someone rings the doorbell and remotely open the door by replying with a simple command.
 
 ## 🚀 Features
 
@@ -16,7 +16,7 @@ You will need an **ESP32-S3-Zero** (or similar ESP32-S3 board) connected as foll
 
 | Component | ESP32-S3 Pin | Description |
 |-----------|--------------|-------------|
-| Ring detector | `GPIO 4` | Input from Tigui SERIE 8 ring signal (pulled down internally). |
+| Ring detector | `GPIO 4` | Input from doorbell ring signal (pulled down internally). |
 | Door relay | `GPIO 45` | Output to door lock relay (active high for 2 seconds). |
 | WS2812 LED | `GPIO 21` | Onboard status indicator (varies by board, check your schematic). |
 | BOOT button | `GPIO 0` | Long-press for 5 seconds to factory reset (erase NVS credentials). |
@@ -84,3 +84,7 @@ Once the device is online (Green LED), you can interact with it via Telegram:
 ## 📝 License
 
 This project is open-source. Feel free to modify and adapt it to your needs!
+
+## ⚠️ Disclaimer
+
+The author is not responsible for any damage, property loss, or violation of home rules, building codes, or local laws caused by the use of this software or hardware modifications. You are modifying building infrastructure at your own risk. Please ensure you have permission to interface with the intercom system in your building.
