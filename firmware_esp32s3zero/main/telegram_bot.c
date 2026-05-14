@@ -72,7 +72,7 @@ static bool is_user_authorized(int64_t user_id) {
     return false;
 }
 
-static bool add_user(int64_t user_id) {
+bool telegram_bot_add_user(int64_t user_id) {
     if (is_user_authorized(user_id)) return false; // Already there
     if (s_whitelist_count < MAX_WHITELIST_USERS) {
         s_whitelist[s_whitelist_count++] = user_id;
@@ -82,7 +82,7 @@ static bool add_user(int64_t user_id) {
     return false;
 }
 
-static bool remove_user(int64_t user_id) {
+bool telegram_bot_remove_user(int64_t user_id) {
     for (int i = 0; i < s_whitelist_count; i++) {
         if (s_whitelist[i] == user_id) {
             for (int j = i; j < s_whitelist_count - 1; j++) {
@@ -94,6 +94,14 @@ static bool remove_user(int64_t user_id) {
         }
     }
     return false;
+}
+
+int telegram_bot_get_whitelist(int64_t *out_whitelist, int max_users) {
+    int count = (s_whitelist_count < max_users) ? s_whitelist_count : max_users;
+    for (int i = 0; i < count; i++) {
+        out_whitelist[i] = s_whitelist[i];
+    }
+    return count;
 }
 
 /* ------------------------------------------------------------------ */
@@ -202,7 +210,7 @@ static void parse_updates(const char *json)
             if (strncmp(text, "/add ", 5) == 0) {
                 int64_t new_user = atoll(text + 5);
                 if (new_user != 0) {
-                    if (add_user(new_user)) {
+                    if (telegram_bot_add_user(new_user)) {
                         telegram_bot_send_message("✅ User added to whitelist.");
                     } else {
                         telegram_bot_send_message("⚠️ Could not add user (already exists or list full).");
@@ -211,7 +219,7 @@ static void parse_updates(const char *json)
                 continue;
             } else if (strncmp(text, "/remove ", 8) == 0) {
                 int64_t del_user = atoll(text + 8);
-                if (remove_user(del_user)) {
+                if (telegram_bot_remove_user(del_user)) {
                     telegram_bot_send_message("✅ User removed from whitelist.");
                 } else {
                     telegram_bot_send_message("⚠️ User not found in whitelist.");
@@ -298,14 +306,14 @@ static void telegram_poll_task(void *pvParameters)
 /* ------------------------------------------------------------------ */
 /* Public: Initialise the Telegram Bot module                         */
 /* ------------------------------------------------------------------ */
-void telegram_bot_init(const char *bot_token, const char *chat_id,
+void telegram_bot_init(const char *bot_token, const char *chat_id, const char *admin_id,
                        telegram_command_callback_t callback)
 {
     strncpy(s_bot_token, bot_token, sizeof(s_bot_token) - 1);
     strncpy(s_chat_id, chat_id, sizeof(s_chat_id) - 1);
     s_cmd_callback = callback;
 
-    s_admin_id = atoll(CONFIG_DOORBELL_TELEGRAM_ADMIN_ID);
+    s_admin_id = atoll(admin_id);
 
     /* Load whitelist from NVS */
     nvs_handle_t my_handle;

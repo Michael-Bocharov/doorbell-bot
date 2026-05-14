@@ -13,8 +13,12 @@
 #include "led_status.h"
 #include "doorbell_logic.h"
 #include "telegram_bot.h"
+#include "config_manager.h"
+#include "web_server.h"
 
 static const char *TAG = "main";
+static device_config_t s_device_config;
+static bool s_has_config = false;
 
 /* Event group bit that signals a successful WiFi connection */
 static const int WIFI_CONNECTED_BIT = BIT0;
@@ -64,8 +68,9 @@ static void network_ready_task(void *pvParameters)
                         pdFALSE, pdTRUE, portMAX_DELAY);
 
     ESP_LOGI(TAG, "WiFi connected — starting Telegram bot");
-    telegram_bot_init(CONFIG_DOORBELL_TELEGRAM_BOT_TOKEN,
-                      CONFIG_DOORBELL_TELEGRAM_CHAT_ID,
+    telegram_bot_init(s_device_config.tg_bot_token,
+                      s_device_config.tg_chat_id,
+                      s_device_config.tg_admin_id,
                       on_telegram_command);
 
     /* Send the startup notification (this is the heavy HTTPS call) */
@@ -94,19 +99,47 @@ static void wifi_init_sta(void)
     ESP_ERROR_CHECK(esp_event_handler_register(
         IP_EVENT, IP_EVENT_STA_GOT_IP, &wifi_event_handler, NULL));
 
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = CONFIG_DOORBELL_WIFI_SSID,
-            .password = CONFIG_DOORBELL_WIFI_PASSWORD,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-        },
-    };
+    wifi_config_t wifi_config = {0};
+    strncpy((char *)wifi_config.sta.ssid, s_device_config.wifi_ssid, sizeof(wifi_config.sta.ssid));
+    strncpy((char *)wifi_config.sta.password, s_device_config.wifi_password, sizeof(wifi_config.sta.password));
+    wifi_config.sta.threshold.authmode = strlen(s_device_config.wifi_password) ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
-    ESP_LOGI(TAG, "WiFi STA started — connecting to %s …",
-             CONFIG_DOORBELL_WIFI_SSID);
+    ESP_LOGI(TAG, "WiFi STA started — connecting to %s …", s_device_config.wifi_ssid);
+}
+
+/* ------------------------------------------------------------------ */
+/* WiFi AP initialisation                                              */
+/* ------------------------------------------------------------------ */
+static void wifi_init_ap(void)
+{
+    s_wifi_event_group = xEventGroupCreate();
+
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    wifi_config_t wifi_config = {
+        .ap = {
+            .ssid = "DoorBell_Admin",
+            .ssid_len = strlen("DoorBell_Admin"),
+            .channel = 1,
+            .password = "12345678",
+            .max_connection = 4,
+            .authmode = WIFI_AUTH_WPA_WPA2_PSK
+        },
+    };
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "WiFi AP started — SSID: DoorBell_Admin, Pass: 12345678");
 }
 
 /* ------------------------------------------------------------------ */
@@ -150,6 +183,9 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_init());
     }
 
+    /* Load config from NVS */
+    s_has_config = config_manager_load(&s_device_config);
+
     /* LED status indicator */
     led_status_init();
     led_status_set(LED_STATUS_CONNECTING);
@@ -157,12 +193,20 @@ void app_main(void)
     /* Doorbell GPIO logic */
     doorbell_logic_init();
 
-    /* Connect to WiFi */
-    wifi_init_sta();
-
-    /* Start a dedicated task to init Telegram after WiFi connects
-       (needs 10 KB stack for TLS handshake + JSON) */
-    xTaskCreate(network_ready_task, "net_ready", 10240, NULL, 5, NULL);
+    if (!s_has_config) {
+        ESP_LOGI(TAG, "No valid config found, starting AP mode");
+        wifi_init_ap();
+        web_server_start();
+        led_status_set(LED_STATUS_ERROR); /* Indicate AP mode/unconfigured */
+    } else {
+        ESP_LOGI(TAG, "Config found, starting STA mode");
+        wifi_init_sta();
+        web_server_start(); /* Keep server alive for admin updates */
+        
+        /* Start a dedicated task to init Telegram after WiFi connects
+           (needs 10 KB stack for TLS handshake + JSON) */
+        xTaskCreate(network_ready_task, "net_ready", 10240, NULL, 5, NULL);
+    }
 
     /* BOOT button monitor (factory-reset on long-press) */
     xTaskCreate(button_monitor_task, "btn_mon", 2048, NULL, 5, NULL);

@@ -1,36 +1,6 @@
 menu "DoorBell Configuration"
 
-    config DOORBELL_WIFI_SSID
-        string "WiFi SSID"
-        default "Default_SSID"
-        help
-            SSID (network name) for the ESP32 to connect to.
-
-    config DOORBELL_WIFI_PASSWORD
-        string "WiFi Password"
-        default "Default_Password"
-        help
-            WiFi password (WPA or WPA2) for the ESP32 to use.
-
-    config DOORBELL_TELEGRAM_BOT_TOKEN
-        string "Telegram Bot Token"
-        default "123456789:ABCdefGHIjklMNOpqrSTUvwxYZ"
-        help
-            Bot token obtained from @BotFather on Telegram.
-            Example: 123456789:ABCdefGHIjklMNOpqrSTUvwxYZ
-
-    config DOORBELL_TELEGRAM_CHAT_ID
-        string "Telegram Chat ID"
-        default "Default_Chat_ID"
-        help
-            Chat ID of the Telegram user or group to send notifications to.
-            Use @userinfobot or @RawDataBot to find your chat ID.
-
-    config DOORBELL_TELEGRAM_ADMIN_ID
-        string "Telegram Admin User ID"
-        default "0"
-        help
-            Telegram User ID of the administrator (numeric).
-            Commands like /add and /remove will only be accepted from this ID.
+    # All configuration is now managed dynamically via NVS
+    # and the Admin Web Interface.
 
 endmenu
