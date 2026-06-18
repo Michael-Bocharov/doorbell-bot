@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
+#include "freertos/timers.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
@@ -23,6 +24,7 @@ static bool s_has_config = false;
 /* Event group bit that signals a successful WiFi connection */
 static const int WIFI_CONNECTED_BIT = BIT0;
 static EventGroupHandle_t s_wifi_event_group;
+static TimerHandle_t s_wifi_reconnect_timer = NULL;
 
 /* ------------------------------------------------------------------ */
 /* Telegram command callback — called from the polling task            */
@@ -37,6 +39,15 @@ static void on_telegram_command(const char *command)
 }
 
 /* ------------------------------------------------------------------ */
+/* WiFi Reconnect Timer Callback                                       */
+/* ------------------------------------------------------------------ */
+static void wifi_reconnect_callback(TimerHandle_t xTimer)
+{
+    ESP_LOGI(TAG, "Reconnecting to WiFi...");
+    esp_wifi_connect();
+}
+
+/* ------------------------------------------------------------------ */
 /* WiFi / IP event handler  (runs on sys_evt task — keep it light!)    */
 /* ------------------------------------------------------------------ */
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -45,13 +56,22 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGW(TAG, "WiFi disconnected — reconnecting…");
+        wifi_event_sta_disconnected_t *disconn = (wifi_event_sta_disconnected_t *)event_data;
+        ESP_LOGW(TAG, "WiFi disconnected (reason: %d) — reconnecting in 5s…", disconn->reason);
         led_status_set(LED_STATUS_CONNECTING);
-        esp_wifi_connect();
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        if (s_wifi_reconnect_timer) {
+            xTimerStart(s_wifi_reconnect_timer, 0);
+        } else {
+            esp_wifi_connect();
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
         ESP_LOGI(TAG, "Connected — IP: " IPSTR, IP2STR(&event->ip_info.ip));
         led_status_set(LED_STATUS_ONLINE);
+        if (s_wifi_reconnect_timer) {
+            xTimerStop(s_wifi_reconnect_timer, 0);
+        }
         /* Signal the network-ready task — do NOT call HTTPS from here */
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
     }
@@ -86,6 +106,8 @@ static void network_ready_task(void *pvParameters)
 static void wifi_init_sta(void)
 {
     s_wifi_event_group = xEventGroupCreate();
+
+    s_wifi_reconnect_timer = xTimerCreate("wifi_reconnect", pdMS_TO_TICKS(5000), pdFALSE, NULL, wifi_reconnect_callback);
 
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
