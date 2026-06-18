@@ -1,4 +1,4 @@
-# DoorBell — Telegram Bot Integration
+      # DoorBell — Telegram Bot Integration
 
 This project is an ESP32-S3-Zero based firmware that bridges a **generic intercom/doorbell system** to **Telegram**. It allows you to receive notifications on your phone when someone rings the doorbell and remotely open the door by replying with a simple command.
 
@@ -85,6 +85,15 @@ The firmware uses a web-based provisioning portal, removing the need to hardcode
    - **Telegram Bot Token**
    - **Telegram Chat ID**
    - **Telegram Admin User ID**: (Required for whitelist functionality). Only this numeric user ID will be able to add/remove other users. You can get your User ID from @userinfobot.
+
+**Admin Panel Preview:**
+
+<p align="center">
+  <img src="assets/admin_panel_1.png" width="32%" />
+  <img src="assets/admin_panel_2.png" width="32%" />
+  <img src="assets/admin_panel_3.png" width="32%" />
+</p>
+
 6. Save the settings. The ESP32 will save them to NVS and reboot to connect to your WiFi and Telegram.
 
 *(If you ever need to change these settings, press and hold the BOOT button on the ESP32 for 5 seconds to factory reset and return to AP provisioning mode).*
