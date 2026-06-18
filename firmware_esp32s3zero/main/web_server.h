@@ -14,4 +14,10 @@ bool web_server_start(void);
  */
 void web_server_stop(void);
 
+/**
+ * @brief Check if the web server is running.
+ * @return true if running
+ */
+bool web_server_is_running(void);
+
 #endif // WEB_SERVER_H
