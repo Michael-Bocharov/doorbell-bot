@@ -10,6 +10,7 @@
 #include "cJSON.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "web_server.h"
 
 static const char *TAG = "telegram_bot";
 
@@ -234,6 +235,25 @@ static void parse_updates(const char *json)
                 }
                 if (s_whitelist_count == 0) strncat(list_msg, "<i>Empty</i>", sizeof(list_msg) - strlen(list_msg) - 1);
                 telegram_bot_send_message(list_msg);
+                continue;
+            } else if (strcasecmp(text, "/web_on") == 0 || strcasecmp(text, "web_on") == 0) {
+                if (web_server_is_running()) {
+                    telegram_bot_send_message("🌐 Web interface is already running.");
+                } else {
+                    if (web_server_start()) {
+                        telegram_bot_send_message("🌐 Web interface started.");
+                    } else {
+                        telegram_bot_send_message("⚠️ Failed to start web interface.");
+                    }
+                }
+                continue;
+            } else if (strcasecmp(text, "/web_off") == 0 || strcasecmp(text, "web_off") == 0) {
+                if (!web_server_is_running()) {
+                    telegram_bot_send_message("🌐 Web interface is already stopped.");
+                } else {
+                    web_server_stop();
+                    telegram_bot_send_message("🌐 Web interface stopped / hidden.");
+                }
                 continue;
             }
         }

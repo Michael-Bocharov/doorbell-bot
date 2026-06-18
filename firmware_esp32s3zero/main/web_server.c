@@ -378,6 +378,10 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
 /* Server init/stop */
 
 bool web_server_start(void) {
+    if (server != NULL) {
+        ESP_LOGI(TAG, "Web server is already running");
+        return true;
+    }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.max_uri_handlers = 10;
     
@@ -418,4 +422,8 @@ void web_server_stop(void) {
         httpd_stop(server);
         server = NULL;
     }
+}
+
+bool web_server_is_running(void) {
+    return (server != NULL);
 }
