@@ -118,6 +118,21 @@ const char *index_html = "<!DOCTYPE html>\n"
 "      <div id=\"device_status\" class=\"status-badge\">Checking...</div>\n"
 "    </div>\n"
 "    <button class=\"success\" onclick=\"openDoor()\" style=\"padding: 24px; font-size: 20px;\">🚪 Open Door</button>\n"
+"    <div style=\"margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--glass-border);\">\n"
+"      <h3>🎉 Party Mode</h3>\n"
+"      <p style=\"font-size: 14px; color: var(--text-muted); margin-bottom: 16px;\">\n"
+"        When active, the doorbell automatically opens the door.\n"
+"      </p>\n"
+"      <div class=\"form-group\" style=\"display: flex; gap: 8px; align-items: center; margin-bottom: 16px;\">\n"
+"        <label style=\"margin-bottom: 0; flex: 1;\">Status: <span id=\"party_status\" class=\"status-badge\" style=\"background: var(--danger);\">Inactive</span></label>\n"
+"        <span id=\"party_remaining\" style=\"font-size: 14px; color: var(--text-muted);\"></span>\n"
+"      </div>\n"
+"      <div class=\"form-group\" style=\"display: flex; gap: 8px; align-items: center;\">\n"
+"        <input type=\"number\" id=\"party_duration\" value=\"2\" min=\"1\" max=\"24\" style=\"width: 80px; text-align: center;\">\n"
+"        <span style=\"font-size: 14px; color: var(--text-muted);\">hours</span>\n"
+"        <button id=\"party_toggle_btn\" onclick=\"togglePartyMode()\" style=\"flex: 1; margin-top: 0; background: var(--primary);\">Enable</button>\n"
+"      </div>\n"
+"    </div>\n"
 "  </div>\n"
 "</div>\n"
 "\n"
@@ -202,7 +217,46 @@ const char *index_html = "<!DOCTYPE html>\n"
 "    let badge = document.getElementById('device_status');\n"
 "    badge.innerText = data.status;\n"
 "    badge.style.background = data.status === 'Connected' ? 'var(--success)' : 'var(--danger)';\n"
+"\n"
+"    let partyBadge = document.getElementById('party_status');\n"
+"    let partyRemaining = document.getElementById('party_remaining');\n"
+"    let partyBtn = document.getElementById('party_toggle_btn');\n"
+"    if (data.party_active) {\n"
+"      partyBadge.innerText = 'Active';\n"
+"      partyBadge.style.background = 'var(--success)';\n"
+"      partyBtn.innerText = 'Disable';\n"
+"      partyBtn.style.background = 'var(--danger)';\n"
+"      let mins = Math.floor(data.party_remaining_sec / 60);\n"
+"      let secs = data.party_remaining_sec % 60;\n"
+"      partyRemaining.innerText = 'Remaining: ' + mins + 'm ' + secs + 's';\n"
+"    } else {\n"
+"      partyBadge.innerText = 'Inactive';\n"
+"      partyBadge.style.background = 'var(--danger)';\n"
+"      partyBtn.innerText = 'Enable';\n"
+"      partyBtn.style.background = 'var(--primary)';\n"
+"      partyRemaining.innerText = '';\n"
+"    }\n"
 "  } catch (e) { console.error(e); }\n"
+"}\n"
+"\n"
+"async function togglePartyMode() {\n"
+"  const partyBadge = document.getElementById('party_status');\n"
+"  const durationInput = document.getElementById('party_duration');\n"
+"  const active = (partyBadge.innerText !== 'Active');\n"
+"  const duration_hours = parseInt(durationInput.value) || 2;\n"
+"  try {\n"
+"    let res = await fetch('/api/party', {\n"
+"      method: 'POST',\n"
+"      body: JSON.stringify({ active: active, duration_hours: duration_hours })\n"
+"    });\n"
+"    if (res.ok) {\n"
+"      loadStatus();\n"
+"    } else {\n"
+"      alert('Failed to update party mode');\n"
+"    }\n"
+"  } catch (e) {\n"
+"    alert('Error updating party mode');\n"
+"  }\n"
 "}\n"
 "\n"
 "async function openDoor() {\n"
@@ -366,12 +420,63 @@ static esp_err_t api_status_get_handler(httpd_req_t *req) {
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "status", connected ? "Connected" : "Disconnected");
+    cJSON_AddBoolToObject(root, "party_active", doorbell_logic_get_party_mode());
+    cJSON_AddNumberToObject(root, "party_remaining_sec", doorbell_logic_get_party_mode_remaining());
+    cJSON_AddNumberToObject(root, "party_duration_hours", doorbell_logic_get_party_mode_duration() / 60);
     
     const char *resp = cJSON_PrintUnformatted(root);
     httpd_resp_set_type(req, "application/json");
     httpd_resp_send(req, resp, strlen(resp));
     free((void *)resp);
     cJSON_Delete(root);
+    return ESP_OK;
+}
+
+static esp_err_t api_party_post_handler(httpd_req_t *req) {
+    char buf[128];
+    int ret, remaining = req->content_len;
+    if (remaining >= sizeof(buf)) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Content too long");
+        return ESP_FAIL;
+    }
+
+    if ((ret = httpd_req_recv(req, buf, remaining)) <= 0) {
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            httpd_resp_send_408(req);
+        }
+        return ESP_FAIL;
+    }
+    buf[ret] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid JSON");
+        return ESP_FAIL;
+    }
+
+    cJSON *active_item = cJSON_GetObjectItem(root, "active");
+    cJSON *dur_item = cJSON_GetObjectItem(root, "duration_hours");
+    
+    bool active = cJSON_IsTrue(active_item);
+    uint32_t duration_hours = 2; // Default 2 hours
+    if (cJSON_IsNumber(dur_item)) {
+        duration_hours = (uint32_t)dur_item->valueint;
+    }
+    
+    doorbell_logic_set_party_mode(active, duration_hours * 60);
+
+    // Send proper notifications to Telegram chat when status changes via Web UI
+    if (active) {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "🎉 Party mode enabled via Web UI for %u hours. Door will automatically open when rung!", (unsigned int)duration_hours);
+        telegram_bot_send_message(msg);
+    } else {
+        telegram_bot_send_message("ℹ️ Party mode disabled via Web UI. Doorbell notifications will require manual open.");
+    }
+
+    cJSON_Delete(root);
+
+    httpd_resp_sendstr(req, "{\"status\":\"ok\"}");
     return ESP_OK;
 }
 
@@ -383,7 +488,7 @@ bool web_server_start(void) {
         return true;
     }
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
-    config.max_uri_handlers = 10;
+    config.max_uri_handlers = 12; // Increased to accommodate new handles
     
     ESP_LOGI(TAG, "Starting web server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
@@ -410,6 +515,9 @@ bool web_server_start(void) {
 
         httpd_uri_t uri_get_status = { .uri = "/api/status", .method = HTTP_GET, .handler = api_status_get_handler, .user_ctx = NULL };
         httpd_register_uri_handler(server, &uri_get_status);
+
+        httpd_uri_t uri_post_party = { .uri = "/api/party", .method = HTTP_POST, .handler = api_party_post_handler, .user_ctx = NULL };
+        httpd_register_uri_handler(server, &uri_post_party);
 
         return true;
     }

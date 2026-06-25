@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 #include "led_status.h"
 #include "telegram_bot.h"
 
@@ -13,6 +14,11 @@ static const char *TAG = "doorbell_logic";
 
 /* Debounce: ignore repeat rings within this window (ms) */
 #define RING_DEBOUNCE_MS 5000
+
+static bool s_party_mode_active = false;
+static uint32_t s_party_mode_duration_minutes = 120; // Default 2 hours
+static TimerHandle_t s_party_mode_timer = NULL;
+static TickType_t s_party_mode_start_tick = 0;
 
 static void ring_detector_task(void *pvParameters) {
   bool last_state = false;
@@ -28,14 +34,20 @@ static void ring_detector_task(void *pvParameters) {
         ESP_LOGI(TAG, "🔔 Doorbell is ringing!");
         led_status_set(LED_STATUS_RINGING);
 
-        telegram_bot_send_message("🔔 <b>Someone is at the door!</b>\n"
-                                  "Reply <b>open</b> to unlock.");
-
-        last_ring_tick = now;
-
-        /* Flash ringing LED for 3 seconds, then back to online */
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        led_status_set(LED_STATUS_ONLINE);
+        if (s_party_mode_active) {
+          ESP_LOGI(TAG, "Party mode active - auto-unlocking door");
+          telegram_bot_send_message("🔔 <b>Someone is at the door!</b>\n🎉 Party mode is active: automatically opening the door!");
+          last_ring_tick = now;
+          doorbell_logic_open_door();
+          led_status_set(LED_STATUS_ONLINE);
+        } else {
+          telegram_bot_send_message("🔔 <b>Someone is at the door!</b>\n"
+                                    "Reply <b>open</b> to unlock.");
+          last_ring_tick = now;
+          /* Flash ringing LED for 3 seconds, then back to online */
+          vTaskDelay(pdMS_TO_TICKS(3000));
+          led_status_set(LED_STATUS_ONLINE);
+        }
       }
     }
 
@@ -75,4 +87,57 @@ void doorbell_logic_open_door(void) {
   vTaskDelay(pdMS_TO_TICKS(2000));
   gpio_set_level(PIN_DOOR_RELAY, 0);
   ESP_LOGI(TAG, "Door relay closed.");
+}
+
+static void party_mode_timer_callback(TimerHandle_t xTimer)
+{
+    ESP_LOGI(TAG, "Party mode expired.");
+    s_party_mode_active = false;
+    telegram_bot_send_message("ℹ️ Party mode has expired and is now disabled.");
+}
+
+void doorbell_logic_set_party_mode(bool active, uint32_t duration_minutes) {
+    s_party_mode_active = active;
+    if (active) {
+        if (duration_minutes == 0) {
+            duration_minutes = 120; // Default to 2 hours
+        }
+        s_party_mode_duration_minutes = duration_minutes;
+        s_party_mode_start_tick = xTaskGetTickCount();
+
+        if (s_party_mode_timer == NULL) {
+            s_party_mode_timer = xTimerCreate("party_timer", pdMS_TO_TICKS(duration_minutes * 60 * 1000), pdFALSE, NULL, party_mode_timer_callback);
+        } else {
+            xTimerChangePeriod(s_party_mode_timer, pdMS_TO_TICKS(duration_minutes * 60 * 1000), 0);
+        }
+        if (s_party_mode_timer) {
+            xTimerStart(s_party_mode_timer, 0);
+        }
+        ESP_LOGI(TAG, "Party mode enabled for %u minutes", (unsigned int)duration_minutes);
+    } else {
+        if (s_party_mode_timer) {
+            xTimerStop(s_party_mode_timer, 0);
+        }
+        ESP_LOGI(TAG, "Party mode disabled");
+    }
+}
+
+bool doorbell_logic_get_party_mode(void) {
+    return s_party_mode_active;
+}
+
+uint32_t doorbell_logic_get_party_mode_remaining(void) {
+    if (!s_party_mode_active) {
+        return 0;
+    }
+    TickType_t elapsed = xTaskGetTickCount() - s_party_mode_start_tick;
+    uint32_t duration_ticks = pdMS_TO_TICKS(s_party_mode_duration_minutes * 60 * 1000);
+    if (elapsed >= duration_ticks) {
+        return 0;
+    }
+    return (duration_ticks - elapsed) * portTICK_PERIOD_MS / 1000;
+}
+
+uint32_t doorbell_logic_get_party_mode_duration(void) {
+    return s_party_mode_duration_minutes;
 }
