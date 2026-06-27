@@ -11,6 +11,7 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "web_server.h"
+#include "doorbell_logic.h"
 
 static const char *TAG = "telegram_bot";
 
@@ -254,6 +255,30 @@ static void parse_updates(const char *json)
                     web_server_stop();
                     telegram_bot_send_message("🌐 Web interface stopped / hidden.");
                 }
+                continue;
+            } else if (strncmp(text, "/party_on", 9) == 0 || strncasecmp(text, "party_on", 8) == 0) {
+                const char *arg = text;
+                if (strncmp(arg, "/party_on", 9) == 0) arg += 9;
+                else arg += 8;
+                while (*arg == ' ') arg++;
+                
+                uint32_t duration_hours = 2; // Default 2 hours
+                if (*arg != '\0') {
+                    int parsed = atoi(arg);
+                    if (parsed > 0) {
+                        duration_hours = (uint32_t)parsed;
+                    }
+                }
+                
+                uint32_t duration_minutes = duration_hours * 60;
+                doorbell_logic_set_party_mode(true, duration_minutes);
+                char resp[128];
+                snprintf(resp, sizeof(resp), "🎉 Party mode enabled for %u hours. Door will automatically open when rung!", (unsigned int)duration_hours);
+                telegram_bot_send_message(resp);
+                continue;
+            } else if (strcasecmp(text, "/party_off") == 0 || strcasecmp(text, "party_off") == 0) {
+                doorbell_logic_set_party_mode(false, 0);
+                telegram_bot_send_message("ℹ️ Party mode disabled. Doorbell notifications will require manual open.");
                 continue;
             }
         }
