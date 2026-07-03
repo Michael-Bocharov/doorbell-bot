@@ -39,4 +39,11 @@ uint32_t doorbell_logic_get_party_mode_remaining(void);
  */
 uint32_t doorbell_logic_get_party_mode_duration(void);
 
+#ifdef UNIT_TESTING
+/**
+ * @brief Reset internal static state for unit testing.
+ */
+void doorbell_logic_test_reset(void);
+#endif
+
 #endif // DOORBELL_LOGIC_H

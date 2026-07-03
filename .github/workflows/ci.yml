@@ -1,0 +1,26 @@
+name: C Unit Tests CI
+
+on:
+  push:
+    branches: [ master, main ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Configure CMake
+      run: cmake -S tests -B build-tests
+
+    - name: Build Unit Tests
+      run: cmake --build build-tests
+
+    - name: Run Unit Tests
+      run: |
+        cd build-tests
+        ctest --output-on-failure
