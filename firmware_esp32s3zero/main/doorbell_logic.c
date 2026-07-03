@@ -141,3 +141,13 @@ uint32_t doorbell_logic_get_party_mode_remaining(void) {
 uint32_t doorbell_logic_get_party_mode_duration(void) {
     return s_party_mode_duration_minutes;
 }
+
+#ifdef UNIT_TESTING
+void doorbell_logic_test_reset(void) {
+    s_party_mode_active = false;
+    s_party_mode_duration_minutes = 120;
+    s_party_mode_timer = NULL;
+    s_party_mode_start_tick = 0;
+}
+#endif
+
