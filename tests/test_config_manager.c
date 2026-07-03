@@ -58,6 +58,9 @@ void test_config_load_valid_config_success(void) {
     TEST_ASSERT_EQUAL_STRING("12345678:AAF-bot", loaded_config.tg_bot_token);
     TEST_ASSERT_EQUAL_STRING("98765432", loaded_config.tg_chat_id);
     TEST_ASSERT_EQUAL_STRING("12345", loaded_config.tg_admin_id);
+    // Unassigned GPIOs in mock database default to 4 and 45 respectively
+    TEST_ASSERT_EQUAL_INT(4, loaded_config.gpio_ring_detector);
+    TEST_ASSERT_EQUAL_INT(45, loaded_config.gpio_door_relay);
 }
 
 void test_config_save_success(void) {
@@ -65,6 +68,8 @@ void test_config_save_success(void) {
     memset(&config_to_save, 0, sizeof(device_config_t));
     strcpy(config_to_save.wifi_ssid, "SaveTestSSID");
     strcpy(config_to_save.wifi_password, "SaveTestPass");
+    config_to_save.gpio_ring_detector = 12;
+    config_to_save.gpio_door_relay = 23;
     
     bool result = config_manager_save(&config_to_save);
     
@@ -78,6 +83,8 @@ void test_config_save_success(void) {
     TEST_ASSERT_EQUAL_INT(sizeof(device_config_t), size);
     TEST_ASSERT_EQUAL_STRING("SaveTestSSID", saved_data->wifi_ssid);
     TEST_ASSERT_EQUAL_STRING("SaveTestPass", saved_data->wifi_password);
+    TEST_ASSERT_EQUAL_INT(12, saved_data->gpio_ring_detector);
+    TEST_ASSERT_EQUAL_INT(23, saved_data->gpio_door_relay);
 }
 
 void test_config_save_open_fails(void) {

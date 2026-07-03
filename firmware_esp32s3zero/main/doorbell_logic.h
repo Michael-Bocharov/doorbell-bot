@@ -6,8 +6,10 @@
 
 /**
  * @brief Initialize GPIOs for doorbell logic.
+ * @param ring_pin GPIO pin for ring detection
+ * @param relay_pin GPIO pin for door relay trigger
  */
-void doorbell_logic_init(void);
+void doorbell_logic_init(int ring_pin, int relay_pin);
 
 /**
  * @brief Trigger the door relay to open the door.

@@ -15,6 +15,8 @@ typedef struct {
     char tg_bot_token[CONFIG_MAX_TG_TOKEN_LEN];
     char tg_chat_id[CONFIG_MAX_TG_CHAT_ID_LEN];
     char tg_admin_id[CONFIG_MAX_TG_ADMIN_ID_LEN];
+    int gpio_ring_detector;
+    int gpio_door_relay;
 } device_config_t;
 
 /**

@@ -71,12 +71,26 @@ void test_party_mode_expiration(void) {
 void test_open_door_triggers_gpio_and_leds(void) {
     mock_esp_reset_gpio_stats();
     
+    doorbell_logic_init(4, 45);
     doorbell_logic_open_door();
     
-    // PIN_DOOR_RELAY is 45. Open door drives it HIGH, then delays 2s, then drives it LOW.
-    // So gpio_set_level(45, 1) then gpio_set_level(45, 0) should be called.
-    TEST_ASSERT_EQUAL_INT(2, mock_esp_get_gpio_set_level_count(45));
+    // s_pin_door_relay is 45. Open door drives it HIGH, then delays 2s, then drives it LOW.
+    // So gpio_set_level(45, 0) (init), then gpio_set_level(45, 1) and gpio_set_level(45, 0) should be called.
+    TEST_ASSERT_EQUAL_INT(3, mock_esp_get_gpio_set_level_count(45));
     TEST_ASSERT_EQUAL_INT(0, mock_esp_get_output_gpio_level(45)); // ended at 0
+}
+
+void test_dynamic_gpio_pins_initialization(void) {
+    mock_esp_reset_gpio_stats();
+    
+    // Initialize with custom pins: ring detector = 12, door relay = 23
+    doorbell_logic_init(12, 23);
+    doorbell_logic_open_door();
+    
+    // It should set level on the configured relay pin (23) rather than the default (45)
+    TEST_ASSERT_EQUAL_INT(3, mock_esp_get_gpio_set_level_count(23));
+    TEST_ASSERT_EQUAL_INT(0, mock_esp_get_output_gpio_level(23));
+    TEST_ASSERT_EQUAL_INT(0, mock_esp_get_gpio_set_level_count(45)); // Pin 45 should not be touched
 }
 
 int main(void) {
@@ -88,5 +102,6 @@ int main(void) {
     RUN_TEST(test_party_mode_disable);
     RUN_TEST(test_party_mode_expiration);
     RUN_TEST(test_open_door_triggers_gpio_and_leds);
+    RUN_TEST(test_dynamic_gpio_pins_initialization);
     return UNITY_END();
 }

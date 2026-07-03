@@ -9,8 +9,8 @@
 
 static const char *TAG = "doorbell_logic";
 
-#define PIN_RING_DETECTOR 4
-#define PIN_DOOR_RELAY 45
+static int s_pin_ring_detector = 4;
+static int s_pin_door_relay = 45;
 
 /* Debounce: ignore repeat rings within this window (ms) */
 #define RING_DEBOUNCE_MS 5000
@@ -25,7 +25,7 @@ static void ring_detector_task(void *pvParameters) {
   TickType_t last_ring_tick = 0;
 
   while (1) {
-    bool current_state = gpio_get_level(PIN_RING_DETECTOR);
+    bool current_state = gpio_get_level(s_pin_ring_detector);
 
     if (current_state && !last_state) {
       TickType_t now = xTaskGetTickCount();
@@ -56,10 +56,13 @@ static void ring_detector_task(void *pvParameters) {
   }
 }
 
-void doorbell_logic_init(void) {
-  /* Configure Ring Detector input (GPIO 4) */
+void doorbell_logic_init(int ring_pin, int relay_pin) {
+  s_pin_ring_detector = ring_pin;
+  s_pin_door_relay = relay_pin;
+
+  /* Configure Ring Detector input */
   gpio_config_t ring_io_conf = {
-      .pin_bit_mask = (1ULL << PIN_RING_DETECTOR),
+      .pin_bit_mask = (1ULL << s_pin_ring_detector),
       .mode = GPIO_MODE_INPUT,
       .pull_up_en = GPIO_PULLUP_DISABLE,
       .pull_down_en = GPIO_PULLDOWN_ENABLE,
@@ -67,25 +70,25 @@ void doorbell_logic_init(void) {
   };
   gpio_config(&ring_io_conf);
 
-  /* Configure Door Relay output (GPIO 5) */
+  /* Configure Door Relay output */
   gpio_config_t relay_io_conf = {
-      .pin_bit_mask = (1ULL << PIN_DOOR_RELAY),
+      .pin_bit_mask = (1ULL << s_pin_door_relay),
       .mode = GPIO_MODE_OUTPUT,
       .pull_up_en = GPIO_PULLUP_DISABLE,
       .pull_down_en = GPIO_PULLDOWN_DISABLE,
       .intr_type = GPIO_INTR_DISABLE,
   };
   gpio_config(&relay_io_conf);
-  gpio_set_level(PIN_DOOR_RELAY, 0);
+  gpio_set_level(s_pin_door_relay, 0);
 
   xTaskCreate(ring_detector_task, "ring_task", 4096, NULL, 5, NULL);
 }
 
 void doorbell_logic_open_door(void) {
   ESP_LOGI(TAG, "🔓 Opening door remotely!");
-  gpio_set_level(PIN_DOOR_RELAY, 1);
+  gpio_set_level(s_pin_door_relay, 1);
   vTaskDelay(pdMS_TO_TICKS(2000));
-  gpio_set_level(PIN_DOOR_RELAY, 0);
+  gpio_set_level(s_pin_door_relay, 0);
   ESP_LOGI(TAG, "Door relay closed.");
 }
 
@@ -148,6 +151,8 @@ void doorbell_logic_test_reset(void) {
     s_party_mode_duration_minutes = 120;
     s_party_mode_timer = NULL;
     s_party_mode_start_tick = 0;
+    s_pin_ring_detector = 4;
+    s_pin_door_relay = 45;
 }
 #endif
 
