@@ -23,6 +23,15 @@ bool config_manager_load(device_config_t *config) {
 
     if (err == ESP_OK && required_size == sizeof(device_config_t)) {
         ESP_LOGI(TAG, "Config loaded from NVS");
+        
+        // Default pins if not set (0)
+        if (config->gpio_ring_detector == 0) {
+            config->gpio_ring_detector = 4;
+        }
+        if (config->gpio_door_relay == 0) {
+            config->gpio_door_relay = 45;
+        }
+
         // Check if config is somewhat valid (has SSID)
         if (strlen(config->wifi_ssid) > 0) {
             return true;

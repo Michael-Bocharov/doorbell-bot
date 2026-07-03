@@ -100,6 +100,8 @@ const char *index_html = "<!DOCTYPE html>\n"
 "      <div class=\"form-group\"><label>Telegram Bot Token</label><input type=\"text\" id=\"tg_token\" required></div>\n"
 "      <div class=\"form-group\"><label>Telegram Chat ID</label><input type=\"text\" id=\"tg_chat\" required></div>\n"
 "      <div class=\"form-group\"><label>Telegram Admin ID</label><input type=\"text\" id=\"tg_admin\" required></div>\n"
+"      <div class=\"form-group\"><label>Ring Sense GPIO Pin</label><input type=\"number\" id=\"ring_pin\" required min=\"0\" max=\"48\"></div>\n"
+"      <div class=\"form-group\"><label>Door Relay GPIO Pin</label><input type=\"number\" id=\"relay_pin\" required min=\"0\" max=\"48\"></div>\n"
 "      <button type=\"submit\">Save & Restart</button>\n"
 "    </form>\n"
 "  </div>\n"
@@ -155,6 +157,8 @@ const char *index_html = "<!DOCTYPE html>\n"
 "    document.getElementById('tg_token').value = data.tg_bot_token || '';\n"
 "    document.getElementById('tg_chat').value = data.tg_chat_id || '';\n"
 "    document.getElementById('tg_admin').value = data.tg_admin_id || '';\n"
+"    document.getElementById('ring_pin').value = data.gpio_ring_detector !== undefined ? data.gpio_ring_detector : 4;\n"
+"    document.getElementById('relay_pin').value = data.gpio_door_relay !== undefined ? data.gpio_door_relay : 45;\n"
 "  } catch (e) { console.error(e); }\n"
 "}\n"
 "\n"
@@ -167,7 +171,9 @@ const char *index_html = "<!DOCTYPE html>\n"
 "    wifi_password: document.getElementById('wifi_pass').value,\n"
 "    tg_bot_token: document.getElementById('tg_token').value,\n"
 "    tg_chat_id: document.getElementById('tg_chat').value,\n"
-"    tg_admin_id: document.getElementById('tg_admin').value\n"
+"    tg_admin_id: document.getElementById('tg_admin').value,\n"
+"    gpio_ring_detector: parseInt(document.getElementById('ring_pin').value) || 4,\n"
+"    gpio_door_relay: parseInt(document.getElementById('relay_pin').value) || 45\n"
 "  };\n"
 "  try {\n"
 "    await fetch('/api/config', { method: 'POST', body: JSON.stringify(data) });\n"
@@ -291,6 +297,8 @@ static esp_err_t api_config_get_handler(httpd_req_t *req) {
     cJSON_AddStringToObject(root, "tg_bot_token", cfg.tg_bot_token);
     cJSON_AddStringToObject(root, "tg_chat_id", cfg.tg_chat_id);
     cJSON_AddStringToObject(root, "tg_admin_id", cfg.tg_admin_id);
+    cJSON_AddNumberToObject(root, "gpio_ring_detector", cfg.gpio_ring_detector);
+    cJSON_AddNumberToObject(root, "gpio_door_relay", cfg.gpio_door_relay);
     
     const char *sys_info = cJSON_PrintUnformatted(root);
     httpd_resp_set_type(req, "application/json");
@@ -345,6 +353,12 @@ static esp_err_t api_config_post_handler(httpd_req_t *req) {
     
     item = cJSON_GetObjectItem(root, "tg_admin_id");
     if (cJSON_IsString(item)) strncpy(cfg.tg_admin_id, item->valuestring, CONFIG_MAX_TG_ADMIN_ID_LEN - 1);
+
+    item = cJSON_GetObjectItem(root, "gpio_ring_detector");
+    if (cJSON_IsNumber(item)) cfg.gpio_ring_detector = item->valueint;
+
+    item = cJSON_GetObjectItem(root, "gpio_door_relay");
+    if (cJSON_IsNumber(item)) cfg.gpio_door_relay = item->valueint;
 
     config_manager_save(&cfg);
     cJSON_Delete(root);

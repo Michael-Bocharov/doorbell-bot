@@ -8,7 +8,7 @@ This project is an ESP32-S3-Zero based firmware that bridges a **generic interco
 - **Remote Unlock**: Reply `open` or `/open` to the bot to activate the door relay.
 - **Whitelist Security**: Only authorized users can open the door. The Admin can add/remove users via Telegram commands.
 - **Visual Feedback**: Onboard WS2812 RGB LED indicates the current system status (Connecting, Online, Ringing, Error).
-- **Web-based Provisioning Portal**: Configure WiFi and Telegram credentials dynamically via a captive portal when starting fresh, no hardcoded secrets required.
+- **Web-based Provisioning Portal**: Configure WiFi, Telegram credentials, and GPIO pin mapping dynamically via a captive portal when starting fresh, no hardcoded secrets required.
 - **Web Interface Control**: Dynamically show/hide the web configuration panel via Telegram commands (`/web_on` and `/web_off`) for increased security on local networks.
 - **Party Mode**: Automatically unlocks the door when the doorbell is rung. Runs on an auto-expiring timer (configurable duration, default 2 hours) and can be toggled via Telegram or the web interface.
 - **No Extra Backend**: Communicates directly with the Telegram Bot API over HTTPS. No MQTT broker, separate backend server, or custom mobile app required.
@@ -20,8 +20,8 @@ You will need an **ESP32-S3-Zero** (or similar ESP32-S3 board) connected as foll
 
 | Component | ESP32-S3 Pin | Description |
 |-----------|--------------|-------------|
-| Ring detector | `GPIO 4` | Input from doorbell ring signal (pulled down internally). |
-| Door relay | `GPIO 45` | Output to door lock relay (active high for 2 seconds). |
+| Ring detector | `GPIO 4` (Default) | Input from doorbell ring signal (pulled down internally). Configurable in web portal. |
+| Door relay | `GPIO 45` (Default) | Output to door lock relay (active high for 2 seconds). Configurable in web portal. |
 | WS2812 LED | `GPIO 21` | Onboard status indicator (varies by board, check your schematic). |
 | BOOT button | `GPIO 0` | Long-press for 5 seconds to factory reset (erase NVS credentials). |
 
@@ -87,6 +87,8 @@ The firmware uses a web-based provisioning portal, removing the need to hardcode
    - **Telegram Bot Token**
    - **Telegram Chat ID**
    - **Telegram Admin User ID**: (Required for whitelist functionality). Only this numeric user ID will be able to add/remove other users. You can get your User ID from @userinfobot.
+   - **Ring Sense GPIO Pin**: The ESP32 GPIO pin connected to the doorbell ring detector circuit (defaults to `4`).
+   - **Door Relay GPIO Pin**: The ESP32 GPIO pin connected to the door relay trigger (defaults to `45`).
 
 **Admin Panel Preview:**
 
@@ -106,6 +108,18 @@ The firmware uses a web-based provisioning portal, removing the need to hardcode
 idf.py build
 idf.py -p /dev/tty.usbmodem* flash monitor
 ```
+
+### 4. Running Unit Tests
+
+Unit tests compile and execute on your host machine (Linux/macOS) using the Unity framework. To run tests locally:
+
+```bash
+cmake -S tests -B tests/build
+cmake --build tests/build
+ctest --test-dir tests/build --output-on-failure
+```
+
+The tests also run automatically in GitHub Actions on every push and pull request.
 
 ## 🏗️ Architecture
 

@@ -210,7 +210,11 @@ void app_main(void) {
   led_status_set(LED_STATUS_CONNECTING);
 
   /* Doorbell GPIO logic */
-  doorbell_logic_init();
+  if (s_has_config) {
+    doorbell_logic_init(s_device_config.gpio_ring_detector, s_device_config.gpio_door_relay);
+  } else {
+    doorbell_logic_init(4, 45);
+  }
 
   if (!s_has_config) {
     ESP_LOGI(TAG, "No valid config found, starting AP mode");
