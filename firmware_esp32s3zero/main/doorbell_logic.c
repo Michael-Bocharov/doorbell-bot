@@ -1,6 +1,7 @@
 #include "doorbell_logic.h"
 #include "driver/gpio.h"
 #include "esp_log.h"
+#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
@@ -21,10 +22,14 @@ static TimerHandle_t s_party_mode_timer = NULL;
 static TickType_t s_party_mode_start_tick = 0;
 
 static void ring_detector_task(void *pvParameters) {
+  esp_task_wdt_add(NULL);
+
   bool last_state = false;
   TickType_t last_ring_tick = 0;
 
   while (1) {
+    esp_task_wdt_reset();
+
     bool current_state = gpio_get_level(s_pin_ring_detector);
 
     if (current_state && !last_state) {
@@ -55,6 +60,7 @@ static void ring_detector_task(void *pvParameters) {
     vTaskDelay(pdMS_TO_TICKS(100)); /* Poll every 100 ms */
   }
 }
+
 
 void doorbell_logic_init(int ring_pin, int relay_pin) {
   s_pin_ring_detector = ring_pin;

@@ -7,11 +7,13 @@
 #include "esp_log.h"
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
+#include "esp_task_wdt.h"
 #include "cJSON.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "web_server.h"
 #include "doorbell_logic.h"
+
 
 static const char *TAG = "telegram_bot";
 
@@ -308,12 +310,19 @@ static void telegram_poll_task(void *pvParameters)
 {
     char url[320];
 
+    /* Register with Task Watchdog Timer */
+    esp_task_wdt_add(NULL);
+
     /* Small initial delay to allow WiFi to stabilise */
     vTaskDelay(pdMS_TO_TICKS(2000));
 
     ESP_LOGI(TAG, "Telegram polling task started");
 
+    TickType_t first_failure_tick = 0;
+
     while (1) {
+        esp_task_wdt_reset();
+
         /* Build URL with offset to only get new updates */
         snprintf(url, sizeof(url),
                  "https://api.telegram.org/bot%s/getUpdates?offset=%lld&timeout=5&allowed_updates=[\"message\"]",
@@ -334,14 +343,34 @@ static void telegram_poll_task(void *pvParameters)
         esp_err_t err = esp_http_client_perform(client);
         if (err == ESP_OK) {
             int status = esp_http_client_get_status_code(client);
-            if (status == 200 && s_recv_len > 0) {
-                parse_updates(s_recv_buf);
+            if (status == 200) {
+                first_failure_tick = 0; /* Reset consecutive failure timer */
+                if (s_recv_len > 0) {
+                    parse_updates(s_recv_buf);
+                }
+            } else {
+                ESP_LOGW(TAG, "getUpdates status=%d", status);
+                if (first_failure_tick == 0) {
+                    first_failure_tick = xTaskGetTickCount();
+                }
             }
         } else {
             ESP_LOGW(TAG, "getUpdates failed: %s", esp_err_to_name(err));
+            if (first_failure_tick == 0) {
+                first_failure_tick = xTaskGetTickCount();
+            }
         }
 
         esp_http_client_cleanup(client);
+        esp_task_wdt_reset();
+
+        /* If network/Telegram has been continuously failing for 15 mins, reboot to recover */
+        if (first_failure_tick != 0 &&
+            (xTaskGetTickCount() - first_failure_tick) > pdMS_TO_TICKS(15 * 60 * 1000)) {
+            ESP_LOGE(TAG, "Continuous polling failures for 15 minutes — triggering recovery restart...");
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            esp_restart();
+        }
 
         /* Short pause before next poll cycle */
         vTaskDelay(pdMS_TO_TICKS(2000));
