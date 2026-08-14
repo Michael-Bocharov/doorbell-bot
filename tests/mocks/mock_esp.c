@@ -338,3 +338,29 @@ esp_err_t nvs_commit(nvs_handle_t handle) {
 void nvs_close(nvs_handle_t handle) {
     // Closed mock handle
 }
+
+// --- Task Watchdog (TWDT) Mocks ---
+esp_err_t esp_task_wdt_init(const esp_task_wdt_config_t *config) {
+    return ESP_OK;
+}
+
+esp_err_t esp_task_wdt_reconfigure(const esp_task_wdt_config_t *config) {
+    return ESP_OK;
+}
+
+esp_err_t esp_task_wdt_deinit(void) {
+    return ESP_OK;
+}
+
+esp_err_t esp_task_wdt_add(TaskHandle_t task_handle) {
+    return ESP_OK;
+}
+
+esp_err_t esp_task_wdt_reset(void) {
+    return ESP_OK;
+}
+
+esp_err_t esp_task_wdt_delete(TaskHandle_t task_handle) {
+    return ESP_OK;
+}
+

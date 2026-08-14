@@ -2,6 +2,7 @@
 #define MOCK_ESP_H
 
 #include "esp_err.h"
+#include "esp_task_wdt.h"
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -9,6 +10,7 @@
 #include "led_status.h"
 #include "telegram_bot.h"
 #include "nvs.h"
+
 
 // Reset all mock states (GPIO, FreeRTOS, Telegram, LED, NVS)
 void mock_esp_reset_all(void);

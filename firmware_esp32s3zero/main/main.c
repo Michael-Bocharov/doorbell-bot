@@ -2,6 +2,7 @@
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "esp_task_wdt.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
@@ -167,6 +168,8 @@ static void wifi_init_ap(void) {
 /* BOOT button monitor — long-press erases NVS and restarts            */
 /* ------------------------------------------------------------------ */
 static void button_monitor_task(void *pvParameters) {
+  esp_task_wdt_add(NULL);
+
   gpio_reset_pin(GPIO_NUM_0);
   gpio_set_direction(GPIO_NUM_0, GPIO_MODE_INPUT);
   gpio_set_pull_mode(GPIO_NUM_0, GPIO_PULLUP_ONLY);
@@ -174,6 +177,8 @@ static void button_monitor_task(void *pvParameters) {
   uint32_t press_start = 0;
 
   while (1) {
+    esp_task_wdt_reset();
+
     if (gpio_get_level(GPIO_NUM_0) == 0) {
       if (press_start == 0) {
         press_start = xTaskGetTickCount();
@@ -194,6 +199,17 @@ static void button_monitor_task(void *pvParameters) {
 /* app_main                                                            */
 /* ------------------------------------------------------------------ */
 void app_main(void) {
+  /* Initialise / reconfigure Task Watchdog Timer (TWDT) for 30s timeout with auto-reboot */
+  esp_task_wdt_config_t twdt_config = {
+      .timeout_ms = 30000,
+      .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+      .trigger_panic = true,
+  };
+  esp_err_t twdt_err = esp_task_wdt_reconfigure(&twdt_config);
+  if (twdt_err == ESP_ERR_INVALID_STATE) {
+    ESP_ERROR_CHECK(esp_task_wdt_init(&twdt_config));
+  }
+
   /* Initialise NVS */
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
@@ -234,3 +250,4 @@ void app_main(void) {
   /* BOOT button monitor (factory-reset on long-press) */
   xTaskCreate(button_monitor_task, "btn_mon", 2048, NULL, 5, NULL);
 }
+
