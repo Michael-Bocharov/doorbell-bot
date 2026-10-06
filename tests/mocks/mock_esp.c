@@ -164,9 +164,12 @@ int gpio_get_level(int gpio_num) {
 }
 
 // --- Telegram Bot Mock ---
+static char s_telegram_last_chat_id[32] = {0};
+
 void mock_esp_reset_telegram_calls(void) {
     s_telegram_send_count = 0;
     s_telegram_last_msg[0] = '\0';
+    s_telegram_last_chat_id[0] = '\0';
 }
 
 int mock_esp_get_telegram_send_count(void) {
@@ -177,13 +180,25 @@ const char *mock_esp_get_telegram_last_msg(void) {
     return s_telegram_last_msg;
 }
 
-bool telegram_bot_send_message(const char *text) {
+const char *mock_esp_get_telegram_last_chat_id(void) {
+    return s_telegram_last_chat_id;
+}
+
+bool telegram_bot_send_message_to(const char *chat_id, const char *text) {
     s_telegram_send_count++;
+    if (chat_id) {
+        strncpy(s_telegram_last_chat_id, chat_id, sizeof(s_telegram_last_chat_id) - 1);
+        s_telegram_last_chat_id[sizeof(s_telegram_last_chat_id) - 1] = '\0';
+    }
     if (text) {
         strncpy(s_telegram_last_msg, text, sizeof(s_telegram_last_msg) - 1);
         s_telegram_last_msg[sizeof(s_telegram_last_msg) - 1] = '\0';
     }
     return true;
+}
+
+bool telegram_bot_send_message(const char *text) {
+    return telegram_bot_send_message_to("default", text);
 }
 
 // --- LED Status Mock ---

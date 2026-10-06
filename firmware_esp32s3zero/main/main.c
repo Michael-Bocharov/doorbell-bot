@@ -30,11 +30,11 @@ static TimerHandle_t s_wifi_reconnect_timer = NULL;
 /* ------------------------------------------------------------------ */
 /* Telegram command callback — called from the polling task            */
 /* ------------------------------------------------------------------ */
-static void on_telegram_command(const char *command) {
+static void on_telegram_command(const char *command, const char *chat_id) {
   if (strcmp(command, "OPEN") == 0) {
     ESP_LOGI(TAG, "Open command received from Telegram");
     doorbell_logic_open_door();
-    telegram_bot_send_message("✅ Door opened!");
+    telegram_bot_send_message_to(chat_id, "✅ Door opened!");
   }
 }
 

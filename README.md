@@ -1,4 +1,6 @@
-      # DoorBell — Telegram Bot Integration
+# DoorBell — Telegram Bot Integration
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 This project is an ESP32-S3-Zero based firmware that bridges a **generic intercom/doorbell system** to **Telegram**. It allows you to receive notifications on your phone when someone rings the doorbell and remotely open the door by replying with a simple command.
 
@@ -9,7 +11,7 @@ This project is an ESP32-S3-Zero based firmware that bridges a **generic interco
 - **Whitelist Security**: Only authorized users can open the door. The Admin can add/remove users via Telegram commands.
 - **Visual Feedback**: Onboard WS2812 RGB LED indicates the current system status (Connecting, Online, Ringing, Error).
 - **Web-based Provisioning Portal**: Configure WiFi, Telegram credentials, and GPIO pin mapping dynamically via a captive portal when starting fresh, no hardcoded secrets required.
-- **Web Interface Control**: Dynamically show/hide the web configuration panel via Telegram commands (`/web_on` and `/web_off`) for increased security on local networks.
+- **Web Interface Control**: Dynamically show/hide the web configuration panel via Telegram commands (`/web_on` and `/web_off`) for increased security on local networks. Triggering `/web_on` immediately returns the current IP address and direct web portal link.
 - **Party Mode**: Automatically unlocks the door when the doorbell is rung. Runs on an auto-expiring timer (configurable duration, default 2 hours) and can be toggled via Telegram or the web interface.
 - **No Extra Backend**: Communicates directly with the Telegram Bot API over HTTPS. No MQTT broker, separate backend server, or custom mobile app required.
 - **Debouncing**: Built-in 5-second debounce to prevent spamming notifications if the doorbell is pressed multiple times quickly.
@@ -144,14 +146,21 @@ Once the device is online (Green LED), you can interact with it via Telegram:
 | `/add <user_id>` | Adds a Telegram User ID to the whitelist so they can open the door. |
 | `/remove <user_id>` | Removes a User ID from the whitelist. |
 | `/list` | Shows the list of currently authorized User IDs. |
-| `/web_on` or `web_on` | Starts/shows the local web configuration interface. |
+| `/web_on` or `web_on` | Starts/shows the local web configuration interface and responds with the current IP address and URL. |
 | `/web_off` or `web_off` | Stops/hides the local web configuration interface. |
 | `/party_on [hours]` or `party_on [hours]` | Enables Party Mode (auto-open door) for the specified number of hours (default 2). |
 | `/party_off` or `party_off` | Disables Party Mode. |
 
 ## 📝 License
 
-This project is open-source. Feel free to modify and adapt it to your needs!
+This project is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — a strong copyleft license.
+
+Under this license:
+- **Share Alike / Copyleft**: If you copy, modify, or distribute this project (or derivative works based on it), your code **must** also be made publicly available under the same GPL-3.0 license.
+- **Attribution**: You must give appropriate credit, refer back to this original project ([Michael-Bocharov/doorbell-bot](https://github.com/Michael-Bocharov/doorbell-bot)), and keep all copyright and license notices intact.
+- **State Changes**: Any modifications made to the code must be documented.
+
+For the full legal text, see the [LICENSE](LICENSE) file.
 
 ## ⚠️ Disclaimer
 

@@ -29,6 +29,7 @@ void mock_esp_reset_gpio_stats(void);
 void mock_esp_reset_telegram_calls(void);
 int mock_esp_get_telegram_send_count(void);
 const char *mock_esp_get_telegram_last_msg(void);
+const char *mock_esp_get_telegram_last_chat_id(void);
 
 // --- LED Status Mock ---
 void mock_esp_reset_led_calls(void);
