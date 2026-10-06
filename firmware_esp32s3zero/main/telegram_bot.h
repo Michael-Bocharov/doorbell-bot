@@ -7,9 +7,10 @@
 /**
  * @brief Callback type for received Telegram commands.
  *
- * @param command The command text (e.g., "open")
+ * @param command  The command text (e.g., "open")
+ * @param chat_id  The originating chat ID (string) to reply to
  */
-typedef void (*telegram_command_callback_t)(const char *command);
+typedef void (*telegram_command_callback_t)(const char *command, const char *chat_id);
 
 /**
  * @brief Initialize the Telegram Bot module.
@@ -26,7 +27,16 @@ void telegram_bot_init(const char *bot_token, const char *chat_id, const char *a
                        telegram_command_callback_t callback);
 
 /**
- * @brief Send a text message to the configured Telegram chat.
+ * @brief Send a text message to a specific Telegram chat.
+ *
+ * @param chat_id  Target chat ID (string, may be negative for groups)
+ * @param text     Message text to send
+ * @return true on success, false on failure
+ */
+bool telegram_bot_send_message_to(const char *chat_id, const char *text);
+
+/**
+ * @brief Send a text message to the default configured Telegram chat.
  *
  * @param text  Message text to send
  * @return true on success, false on failure

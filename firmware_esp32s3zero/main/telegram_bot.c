@@ -13,6 +13,7 @@
 #include "nvs_flash.h"
 #include "web_server.h"
 #include "doorbell_logic.h"
+#include "esp_netif.h"
 
 
 static const char *TAG = "telegram_bot";
@@ -109,9 +110,9 @@ int telegram_bot_get_whitelist(int64_t *out_whitelist, int max_users) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Send a message to the configured Telegram chat                     */
+/* Send a message to a specific Telegram chat                         */
 /* ------------------------------------------------------------------ */
-bool telegram_bot_send_message(const char *text)
+bool telegram_bot_send_message_to(const char *chat_id, const char *text)
 {
     char url[256];
     snprintf(url, sizeof(url),
@@ -119,7 +120,7 @@ bool telegram_bot_send_message(const char *text)
 
     /* Build JSON body */
     cJSON *body = cJSON_CreateObject();
-    cJSON_AddStringToObject(body, "chat_id", s_chat_id);
+    cJSON_AddStringToObject(body, "chat_id", chat_id);
     cJSON_AddStringToObject(body, "text", text);
     cJSON_AddStringToObject(body, "parse_mode", "HTML");
     char *json_str = cJSON_PrintUnformatted(body);
@@ -156,6 +157,33 @@ bool telegram_bot_send_message(const char *text)
     esp_http_client_cleanup(client);
     free(json_str);
     return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/* Send a message to the default configured Telegram chat             */
+/* ------------------------------------------------------------------ */
+bool telegram_bot_send_message(const char *text)
+{
+    return telegram_bot_send_message_to(s_chat_id, text);
+}
+
+/* ------------------------------------------------------------------ */
+/* Helper to retrieve current IP address (STA first, AP fallback)    */
+/* ------------------------------------------------------------------ */
+static bool get_device_ip(char *ip_buf, size_t max_len)
+{
+    esp_netif_ip_info_t ip_info;
+    esp_netif_t *netif = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
+    if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+        snprintf(ip_buf, max_len, IPSTR, IP2STR(&ip_info.ip));
+        return true;
+    }
+    netif = esp_netif_get_handle_from_ifkey("WIFI_AP_DEF");
+    if (netif && esp_netif_get_ip_info(netif, &ip_info) == ESP_OK && ip_info.ip.addr != 0) {
+        snprintf(ip_buf, max_len, IPSTR, IP2STR(&ip_info.ip));
+        return true;
+    }
+    return false;
 }
 
 /* ------------------------------------------------------------------ */
@@ -199,6 +227,20 @@ static void parse_updates(const char *json)
         const char *text = text_obj->valuestring;
         ESP_LOGI(TAG, "Received message: %s", text);
 
+        /* Extract originating chat ID (reply target) */
+        cJSON *chat = cJSON_GetObjectItem(message, "chat");
+        char reply_chat_id[32] = {0};
+        if (chat) {
+            cJSON *chat_id_obj = cJSON_GetObjectItem(chat, "id");
+            if (cJSON_IsNumber(chat_id_obj)) {
+                snprintf(reply_chat_id, sizeof(reply_chat_id), "%lld", (long long)chat_id_obj->valuedouble);
+            }
+        }
+        /* Fallback to configured default if chat ID extraction failed */
+        if (reply_chat_id[0] == '\0') {
+            strncpy(reply_chat_id, s_chat_id, sizeof(reply_chat_id) - 1);
+        }
+
         /* Extract sender ID */
         cJSON *from = cJSON_GetObjectItem(message, "from");
         int64_t from_id = 0;
@@ -215,18 +257,18 @@ static void parse_updates(const char *json)
                 int64_t new_user = atoll(text + 5);
                 if (new_user != 0) {
                     if (telegram_bot_add_user(new_user)) {
-                        telegram_bot_send_message("✅ User added to whitelist.");
+                        telegram_bot_send_message_to(reply_chat_id, "✅ User added to whitelist.");
                     } else {
-                        telegram_bot_send_message("⚠️ Could not add user (already exists or list full).");
+                        telegram_bot_send_message_to(reply_chat_id, "⚠️ Could not add user (already exists or list full).");
                     }
                 }
                 continue;
             } else if (strncmp(text, "/remove ", 8) == 0) {
                 int64_t del_user = atoll(text + 8);
                 if (telegram_bot_remove_user(del_user)) {
-                    telegram_bot_send_message("✅ User removed from whitelist.");
+                    telegram_bot_send_message_to(reply_chat_id, "✅ User removed from whitelist.");
                 } else {
-                    telegram_bot_send_message("⚠️ User not found in whitelist.");
+                    telegram_bot_send_message_to(reply_chat_id, "⚠️ User not found in whitelist.");
                 }
                 continue;
             } else if (strcasecmp(text, "/list") == 0) {
@@ -237,25 +279,37 @@ static void parse_updates(const char *json)
                     strncat(list_msg, user_str, sizeof(list_msg) - strlen(list_msg) - 1);
                 }
                 if (s_whitelist_count == 0) strncat(list_msg, "<i>Empty</i>", sizeof(list_msg) - strlen(list_msg) - 1);
-                telegram_bot_send_message(list_msg);
+                telegram_bot_send_message_to(reply_chat_id, list_msg);
                 continue;
             } else if (strcasecmp(text, "/web_on") == 0 || strcasecmp(text, "web_on") == 0) {
+                char ip_buf[32];
+                char resp[128];
                 if (web_server_is_running()) {
-                    telegram_bot_send_message("🌐 Web interface is already running.");
+                    if (get_device_ip(ip_buf, sizeof(ip_buf))) {
+                        snprintf(resp, sizeof(resp), "🌐 Web interface is already running:\nhttp://%s", ip_buf);
+                    } else {
+                        snprintf(resp, sizeof(resp), "🌐 Web interface is already running.");
+                    }
+                    telegram_bot_send_message_to(reply_chat_id, resp);
                 } else {
                     if (web_server_start()) {
-                        telegram_bot_send_message("🌐 Web interface started.");
+                        if (get_device_ip(ip_buf, sizeof(ip_buf))) {
+                            snprintf(resp, sizeof(resp), "🌐 Web interface started:\nhttp://%s", ip_buf);
+                        } else {
+                            snprintf(resp, sizeof(resp), "🌐 Web interface started.");
+                        }
+                        telegram_bot_send_message_to(reply_chat_id, resp);
                     } else {
-                        telegram_bot_send_message("⚠️ Failed to start web interface.");
+                        telegram_bot_send_message_to(reply_chat_id, "⚠️ Failed to start web interface.");
                     }
                 }
                 continue;
             } else if (strcasecmp(text, "/web_off") == 0 || strcasecmp(text, "web_off") == 0) {
                 if (!web_server_is_running()) {
-                    telegram_bot_send_message("🌐 Web interface is already stopped.");
+                    telegram_bot_send_message_to(reply_chat_id, "🌐 Web interface is already stopped.");
                 } else {
                     web_server_stop();
-                    telegram_bot_send_message("🌐 Web interface stopped / hidden.");
+                    telegram_bot_send_message_to(reply_chat_id, "🌐 Web interface stopped / hidden.");
                 }
                 continue;
             } else if (strncmp(text, "/party_on", 9) == 0 || strncasecmp(text, "party_on", 8) == 0) {
@@ -276,11 +330,11 @@ static void parse_updates(const char *json)
                 doorbell_logic_set_party_mode(true, duration_minutes);
                 char resp[128];
                 snprintf(resp, sizeof(resp), "🎉 Party mode enabled for %u hours. Door will automatically open when rung!", (unsigned int)duration_hours);
-                telegram_bot_send_message(resp);
+                telegram_bot_send_message_to(reply_chat_id, resp);
                 continue;
             } else if (strcasecmp(text, "/party_off") == 0 || strcasecmp(text, "party_off") == 0) {
                 doorbell_logic_set_party_mode(false, 0);
-                telegram_bot_send_message("ℹ️ Party mode disabled. Doorbell notifications will require manual open.");
+                telegram_bot_send_message_to(reply_chat_id, "ℹ️ Party mode disabled. Doorbell notifications will require manual open.");
                 continue;
             }
         }
@@ -289,12 +343,12 @@ static void parse_updates(const char *json)
         if (strcasecmp(text, "open") == 0 || strcasecmp(text, "/open") == 0) {
             if (is_user_authorized(from_id)) {
                 if (s_cmd_callback) {
-                    s_cmd_callback("OPEN");
+                    s_cmd_callback("OPEN", reply_chat_id);
                 }
             } else {
                 char msg[128];
                 snprintf(msg, sizeof(msg), "⛔️ Unauthorized access attempt from ID: %lld", from_id);
-                telegram_bot_send_message(msg);
+                telegram_bot_send_message_to(reply_chat_id, msg);
                 ESP_LOGW(TAG, "Unauthorized access attempt from %lld", from_id);
             }
         }
